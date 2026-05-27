@@ -22,14 +22,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Cache Dart pub dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.pub-cache
-          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pub-
-
       - name: Set up Java (Temurin 11)
         uses: actions/setup-java@v3
         with:
@@ -50,13 +42,12 @@ jobs:
         run: flutter pub get
 
       - name: Build Flutter web (release)
-        run: flutter build web --release
+        run: flutter build web --release --base-href "/namsor/"
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v1
+        with:
+          path: build/web
 
       - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
-        with:
-          branch: gh-pages
-          folder: build/web
-          clean: true
-          single-commit: true
-          token: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/deploy-pages@v1
