@@ -9,7 +9,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Deploying to Firebase Hosting..."
-firebase deploy
+npx firebase deploy
 if ($LASTEXITCODE -ne 0) {
     throw "Firebase deploy failed."
 }
