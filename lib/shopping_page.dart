@@ -1,9 +1,9 @@
 // shopping_page.dart
-import 'dart:io';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
+import 'src/receipt_image_helper.dart'
+    if (dart.library.io) 'src/receipt_image_helper_io.dart';
 
 // ==================== DATA MODEL ຊື້ເຄື່ອງ ====================
 class ShoppingItem {
@@ -647,21 +647,7 @@ class _ShoppingListPageState extends State<ShoppingListPage> {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: kIsWeb
-                          ? Image.network(
-                              path,
-                              width: 250,
-                              height: 350,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => _buildErrorPlaceholder(),
-                            )
-                          : Image.file(
-                              File(path),
-                              width: 250,
-                              height: 350,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => _buildErrorPlaceholder(),
-                            ),
+                      child: buildReceiptImage(path, _buildErrorPlaceholder()),
                     ),
                   );
                 }).toList(),
