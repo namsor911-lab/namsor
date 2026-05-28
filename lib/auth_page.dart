@@ -421,7 +421,6 @@ class _AuthPageState extends State<AuthPage>
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                // ✅ ແກ້ໄຂ withOpacity → withValues
                 color: const Color(0xFF3FB950).withValues(alpha: 0.3),
                 blurRadius: 20,
                 offset: const Offset(0, 6),
@@ -521,7 +520,6 @@ class _AuthPageState extends State<AuthPage>
       decoration: BoxDecoration(
         color: const Color(0xFF4D2A2A),
         borderRadius: BorderRadius.circular(6),
-        // ✅ ແກ້ໄຂ withOpacity → withValues
         border: Border.all(color: const Color(0xFFF85149).withValues(alpha: 0.4)),
       ),
       child: Row(
@@ -540,170 +538,174 @@ class _AuthPageState extends State<AuthPage>
   }
 
   Widget _buildLoginForm() {
-    return Column(
-      children: [
-        TextField(
-          controller: _loginEmailCtrl,
-          keyboardType: TextInputType.emailAddress,
-          autocorrect: false,
-          enableSuggestions: false,
-          decoration: const InputDecoration(
-            labelText: 'ອີເມວ',
-            prefixIcon: Icon(Icons.email_outlined, size: 18),
-          ),
-          onSubmitted: (_) => _handleLogin(),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _loginPasswordCtrl,
-          obscureText: _loginObscure,
-          autocorrect: false,
-          enableSuggestions: false,
-          decoration: InputDecoration(
-            labelText: 'ລະຫັດຜ່ານ',
-            prefixIcon: const Icon(Icons.lock_outline, size: 18),
-            suffixIcon: IconButton(
-              icon: Icon(
-                _loginObscure ? Icons.visibility_off : Icons.visibility,
-                size: 18,
-              ),
-              onPressed: () => setState(() => _loginObscure = !_loginObscure),
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          TextField(
+            controller: _loginEmailCtrl,
+            keyboardType: TextInputType.emailAddress,
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: const InputDecoration(
+              labelText: 'ອີເມວ',
+              prefixIcon: Icon(Icons.email_outlined, size: 18),
             ),
+            onSubmitted: (_) => _handleLogin(),
           ),
-          onSubmitted: (_) => _handleLogin(),
-        ),
-        const SizedBox(height: 20),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: _isLoading ? null : _handleLogin,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF238636),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _loginPasswordCtrl,
+            obscureText: _loginObscure,
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: InputDecoration(
+              labelText: 'ລະຫັດຜ່ານ',
+              prefixIcon: const Icon(Icons.lock_outline, size: 18),
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _loginObscure ? Icons.visibility_off : Icons.visibility,
+                  size: 18,
+                ),
+                onPressed: () => setState(() => _loginObscure = !_loginObscure),
               ),
             ),
-            child: _isLoading
-                ? const SizedBox(
-                    height: 18,
-                    width: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
+            onSubmitted: (_) => _handleLogin(),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _isLoading ? null : _handleLogin,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF238636),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+              child: _isLoading
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text(
+                      'ເຂົ້າສູ່ລະບົບ',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                     ),
-                  )
-                : const Text(
-                    'ເຂົ້າສູ່ລະບົບ',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildRegisterForm() {
-    return Column(
-      children: [
-        TextField(
-          controller: _regNameCtrl,
-          decoration: const InputDecoration(
-            labelText: 'ຊື່ - ນາມສະກຸນ',
-            prefixIcon: Icon(Icons.person_outline, size: 18),
-          ),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _regEmailCtrl,
-          keyboardType: TextInputType.emailAddress,
-          autocorrect: false,
-          enableSuggestions: false,
-          decoration: const InputDecoration(
-            labelText: 'ອີເມວ',
-            prefixIcon: Icon(Icons.email_outlined, size: 18),
-          ),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _regPasswordCtrl,
-          obscureText: _regObscure,
-          autocorrect: false,
-          enableSuggestions: false,
-          decoration: InputDecoration(
-            labelText: 'ລະຫັດຜ່ານ (≥8 ຕົວ, ມີ A-Z, 0-9)',
-            prefixIcon: const Icon(Icons.lock_outline, size: 18),
-            suffixIcon: IconButton(
-              icon: Icon(
-                _regObscure ? Icons.visibility_off : Icons.visibility,
-                size: 18,
-              ),
-              onPressed: () => setState(() => _regObscure = !_regObscure),
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          TextField(
+            controller: _regNameCtrl,
+            decoration: const InputDecoration(
+              labelText: 'ຊື່ - ນາມສະກຸນ',
+              prefixIcon: Icon(Icons.person_outline, size: 18),
             ),
           ),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _regConfirmCtrl,
-          obscureText: _regConfirmObscure,
-          autocorrect: false,
-          enableSuggestions: false,
-          decoration: InputDecoration(
-            labelText: 'ຢືນຢັນລະຫັດຜ່ານ',
-            prefixIcon: const Icon(Icons.lock_outline, size: 18),
-            suffixIcon: IconButton(
-              icon: Icon(
-                _regConfirmObscure ? Icons.visibility_off : Icons.visibility,
-                size: 18,
-              ),
-              onPressed: () =>
-                  setState(() => _regConfirmObscure = !_regConfirmObscure),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _regEmailCtrl,
+            keyboardType: TextInputType.emailAddress,
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: const InputDecoration(
+              labelText: 'ອີເມວ',
+              prefixIcon: Icon(Icons.email_outlined, size: 18),
             ),
           ),
-          onSubmitted: (_) => _handleRegister(),
-        ),
-        // Password hint
-        const SizedBox(height: 8),
-        const Row(
-          children: [
-            Icon(Icons.info_outline, size: 12, color: Color(0xFF484F58)),
-            SizedBox(width: 4),
-            Expanded(
-              child: Text(
-                'ລະຫັດຜ່ານຕ້ອງ: ≥8 ຕົວ, ມີຕົວພິມໃຫຍ່ (A-Z) ແລະ ຕົວເລກ (0-9)',
-                style: TextStyle(fontSize: 10, color: Color(0xFF484F58)),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _regPasswordCtrl,
+            obscureText: _regObscure,
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: InputDecoration(
+              labelText: 'ລະຫັດຜ່ານ (≥8 ຕົວ, ມີ A-Z, 0-9)',
+              prefixIcon: const Icon(Icons.lock_outline, size: 18),
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _regObscure ? Icons.visibility_off : Icons.visibility,
+                  size: 18,
+                ),
+                onPressed: () => setState(() => _regObscure = !_regObscure),
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: _isLoading ? null : _handleRegister,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1F6FEB),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _regConfirmCtrl,
+            obscureText: _regConfirmObscure,
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: InputDecoration(
+              labelText: 'ຢືນຢັນລະຫັດຜ່ານ',
+              prefixIcon: const Icon(Icons.lock_outline, size: 18),
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _regConfirmObscure ? Icons.visibility_off : Icons.visibility,
+                  size: 18,
+                ),
+                onPressed: () =>
+                    setState(() => _regConfirmObscure = !_regConfirmObscure),
               ),
             ),
-            child: _isLoading
-                ? const SizedBox(
-                    height: 18,
-                    width: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
+            onSubmitted: (_) => _handleRegister(),
+          ),
+          // Password hint
+          const SizedBox(height: 8),
+          const Row(
+            children: [
+              Icon(Icons.info_outline, size: 12, color: Color(0xFF484F58)),
+              SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  'ລະຫັດຜ່ານຕ້ອງ: ≥8 ຕົວ, ມີຕົວພິມໃຫຍ່ (A-Z) ແລະ ຕົວເລກ (0-9)',
+                  style: TextStyle(fontSize: 10, color: Color(0xFF484F58)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _isLoading ? null : _handleRegister,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1F6FEB),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+              child: _isLoading
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text(
+                      'ລົງທະບຽນ',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                     ),
-                  )
-                : const Text(
-                    'ລົງທະບຽນ',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
