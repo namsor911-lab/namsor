@@ -1,14 +1,583 @@
 // main.dart
-import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:universal_html/html.dart' as html;
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';   // ສ້າງດ້ວຍ flutterfire configure
-import 'auth_page.dart';
-import 'firebase_service.dart' show FirebaseAuthService, TransactionService, SignatureService, AuthResult;
-import 'shopping_page.dart';
-import 'tax_page.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
+import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
+import 'firebase_options.dart';
+
+// ==================== FIREBASE SERVICE CLASSES ====================
+class AuthResult {
+  final bool success;
+  final String message;
+  final String? uid;
+  final String? email;
+  final String? name;
+
+  AuthResult({
+    required this.success,
+    required this.message,
+    this.uid,
+    this.email,
+    this.name,
+  });
+}
+
+class FirebaseAuthService {
+  static final fb_auth.FirebaseAuth _auth = fb_auth.FirebaseAuth.instance;
+  static final FirebaseFirestore _db = FirebaseFirestore.instance;
+
+  static Future<AuthResult> register(
+    String email,
+    String password,
+    String name,
+  ) async {
+    try {
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: email.trim().toLowerCase(),
+        password: password,
+      );
+      await credential.user?.updateDisplayName(name.trim());
+
+      await _db.collection('users').doc(credential.user!.uid).set({
+        'name': name.trim(),
+        'email': email.trim().toLowerCase(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      return AuthResult(
+        success: true,
+        message: 'ລົງທະບຽນສຳເລັດ',
+        uid: credential.user!.uid,
+        email: email.trim().toLowerCase(),
+        name: name.trim(),
+      );
+    } on fb_auth.FirebaseAuthException catch (e) {
+      return AuthResult(success: false, message: _authError(e.code));
+    } catch (_) {
+      return AuthResult(success: false, message: 'ເກີດຂໍ້ຜິດພາດ ກະລຸນາລອງໃໝ່');
+    }
+  }
+
+  static Future<AuthResult> login(String email, String password) async {
+    try {
+      final credential = await _auth.signInWithEmailAndPassword(
+        email: email.trim().toLowerCase(),
+        password: password,
+      );
+      final doc = await _db.collection('users').doc(credential.user!.uid).get();
+      final name =
+          doc.data()?['name'] as String? ??
+          credential.user?.displayName ??
+          email;
+
+      return AuthResult(
+        success: true,
+        message: 'ເຂົ້າສູ່ລະບົບສຳເລັດ',
+        uid: credential.user!.uid,
+        email: email.trim().toLowerCase(),
+        name: name,
+      );
+    } on fb_auth.FirebaseAuthException catch (e) {
+      return AuthResult(success: false, message: _authError(e.code));
+    } catch (_) {
+      return AuthResult(success: false, message: 'ເກີດຂໍ້ຜິດພາດ ກະລຸນາລອງໃໝ່');
+    }
+  }
+
+  static Future<void> logout() async {
+    await _auth.signOut();
+  }
+
+  static AuthResult? getCurrentSession() {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    return AuthResult(
+      success: true,
+      message: '',
+      uid: user.uid,
+      email: user.email ?? '',
+      name: user.displayName ?? user.email ?? '',
+    );
+  }
+
+  static Future<List<Map<String, dynamic>>> getAllUsers() async {
+    try {
+      final snap = await _db.collection('users').get();
+      return snap.docs.map((d) {
+        final data = d.data();
+        return {
+          'name': data['name'] ?? '',
+          'email': data['email'] ?? '',
+          'createdAt': (data['createdAt'] as Timestamp?)
+              ?.toDate()
+              .toIso8601String(),
+        };
+      }).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Stream<fb_auth.User?> get authStateChanges =>
+      _auth.authStateChanges();
+
+  static String _authError(String code) {
+    switch (code) {
+      case 'email-already-in-use':
+        return 'ອີເມວນີ້ຖືກໃຊ້ງານແລ້ວ';
+      case 'invalid-email':
+        return 'ຮູບແບບອີເມວບໍ່ຖືກຕ້ອງ';
+      case 'weak-password':
+        return 'ລະຫັດຜ່ານຕ້ອງມີຢ່າງນ້ອຍ 6 ຕົວອັກສອນ';
+      case 'user-not-found':
+      case 'wrong-password':
+      case 'invalid-credential':
+        return 'ອີເມວ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ';
+      case 'too-many-requests':
+        return 'ເຂົ້າຜິດຫຼາຍຄັ້ງ ກະລຸນາລໍຖ້າ';
+      case 'user-disabled':
+        return 'ບັນຊີນີ້ຖືກລ໋ອກ';
+      default:
+        return 'ເກີດຂໍ້ຜິດພາດ ($code) ກະລຸນາລອງໃໝ່';
+    }
+  }
+}
+
+class TransactionService {
+  static final _col = FirebaseFirestore.instance.collection('transactions');
+
+  static Stream<List<Transaction>> stream() {
+    return _col.orderBy('date').snapshots().map(
+          (snap) => snap.docs.map((d) => Transaction.fromJson(_fix(d))).toList(),
+        );
+  }
+
+  static Future<void> add(Transaction t) async {
+    await _col.doc(t.id).set(t.toJson());
+  }
+
+  static Future<void> update(Transaction t) async {
+    await _col.doc(t.id).set(t.toJson());
+  }
+
+  static Future<void> delete(String id) async {
+    await _col.doc(id).delete();
+  }
+
+  static Future<void> deleteAll() async {
+    final snap = await _col.get();
+    final batch = FirebaseFirestore.instance.batch();
+    for (final d in snap.docs) {
+      batch.delete(d.reference);
+    }
+    await batch.commit();
+  }
+
+  static Map<String, dynamic> _fix(DocumentSnapshot d) {
+    final data = d.data() as Map<String, dynamic>;
+    if (data['date'] is Timestamp) {
+      data['date'] = (data['date'] as Timestamp).toDate().toIso8601String();
+    }
+    data['id'] = d.id;
+    return data;
+  }
+}
+
+class SignatureService {
+  static final _doc = FirebaseFirestore.instance
+      .collection('app_data')
+      .doc('signatures');
+
+  static Stream<Map<String, SignatureData>> stream() {
+    return _doc.snapshots().map((snap) {
+      if (!snap.exists) return {};
+      final raw = snap.data() as Map<String, dynamic>;
+      return raw.map(
+        (k, v) => MapEntry(k, SignatureData.fromJson(v as Map<String, dynamic>)),
+      );
+    });
+  }
+
+  static Future<void> update(String role, SignatureData data) async {
+    await _doc.set({role: data.toJson()}, SetOptions(merge: true));
+  }
+
+  static Future<void> delete(String role) async {
+    await _doc.update({role: FieldValue.delete()});
+  }
+
+  static Future<void> deleteAll() async {
+    await _doc.delete();
+  }
+}
+
+class ShoppingItemService {
+  static final _col = FirebaseFirestore.instance.collection('shopping_items');
+
+  static Stream<List<ShoppingItem>> stream() {
+    return _col.orderBy('date', descending: true).snapshots().map(
+          (snap) => snap.docs.map((d) {
+            final data = Map<String, dynamic>.from(d.data());
+            if (data['date'] is Timestamp) {
+              data['date'] = (data['date'] as Timestamp).toDate().toIso8601String();
+            }
+            data['id'] = d.id;
+            return ShoppingItem.fromJson(data);
+          }).toList(),
+        );
+  }
+
+  static Future<void> add(ShoppingItem item) async {
+    await _col.doc(item.id).set(item.toJson());
+  }
+
+  static Future<void> update(ShoppingItem item) async {
+    await _col.doc(item.id).set(item.toJson());
+  }
+
+  static Future<void> delete(String id) async {
+    await _col.doc(id).delete();
+  }
+}
+
+class PlanItemService {
+  static final _col = FirebaseFirestore.instance.collection('shopping_plan');
+
+  static Stream<List<PlanItem>> stream() {
+    return _col.snapshots().map(
+          (snap) => snap.docs.map((d) {
+            final data = Map<String, dynamic>.from(d.data());
+            data['id'] = d.id;
+            return PlanItem.fromJson(data);
+          }).toList(),
+        );
+  }
+
+  static Future<void> add(PlanItem item) async {
+    await _col.doc(item.id).set(item.toJson());
+  }
+
+  static Future<void> update(PlanItem item) async {
+    await _col.doc(item.id).set(item.toJson());
+  }
+
+  static Future<void> delete(String id) async {
+    await _col.doc(id).delete();
+  }
+}
+
+class TaxRecordService {
+  static final _empCol = FirebaseFirestore.instance.collection('tax_employees');
+  static final _vatCol = FirebaseFirestore.instance.collection('tax_vat');
+  static final _profitCol = FirebaseFirestore.instance.collection('tax_profit');
+
+  static Stream<List<TaxRecord>> employeesStream() {
+    return _empCol.snapshots().map(
+          (snap) => snap.docs.map((d) {
+            final data = Map<String, dynamic>.from(d.data());
+            data['id'] = d.id;
+            return TaxRecord.fromJson(data);
+          }).toList(),
+        );
+  }
+
+  static Future<void> addEmployee(TaxRecord r) async {
+    await _empCol.doc(r.id).set(r.toJson());
+  }
+
+  static Future<void> updateEmployee(TaxRecord r) async {
+    await _empCol.doc(r.id).set(r.toJson());
+  }
+
+  static Future<void> deleteEmployee(String id) async {
+    await _empCol.doc(id).delete();
+  }
+
+  static Stream<List<VatRecord>> vatStream() {
+    return _vatCol.snapshots().map(
+          (snap) => snap.docs.map((d) {
+            final data = Map<String, dynamic>.from(d.data());
+            data['id'] = d.id;
+            return VatRecord.fromJson(data);
+          }).toList(),
+        );
+  }
+
+  static Future<void> addVat(VatRecord r) async {
+    await _vatCol.doc(r.id).set(r.toJson());
+  }
+
+  static Future<void> deleteVat(String id) async {
+    await _vatCol.doc(id).delete();
+  }
+
+  static Stream<List<ProfitTaxRecord>> profitStream() {
+    return _profitCol.snapshots().map(
+          (snap) => snap.docs.map((d) {
+            final data = Map<String, dynamic>.from(d.data());
+            data['id'] = d.id;
+            return ProfitTaxRecord.fromJson(data);
+          }).toList(),
+        );
+  }
+
+  static Future<void> addProfit(ProfitTaxRecord r) async {
+    await _profitCol.doc(r.id).set(r.toJson());
+  }
+
+  static Future<void> deleteProfit(String id) async {
+    await _profitCol.doc(id).delete();
+  }
+}
+
+// ==================== SHOPPING MODELS & HELPERS ====================
+final List<PlanItem> globalPlanItems = [];
+
+Widget buildReceiptImage(String path, Widget placeholder) {
+  return Image.network(
+    path,
+    width: 250,
+    height: 350,
+    fit: BoxFit.cover,
+    errorBuilder: (context, error, stackTrace) => placeholder,
+  );
+}
+
+class ShoppingItem {
+  final String id;
+  DateTime date;
+  String itemName;
+  double quantity;
+  double unitPrice;
+  String unit;
+  String note;
+  List<String> receipts;
+
+  double get totalPrice => quantity * unitPrice;
+
+  ShoppingItem({
+    required this.id,
+    required this.date,
+    required this.itemName,
+    required this.quantity,
+    required this.unitPrice,
+    required this.unit,
+    this.note = '',
+    this.receipts = const [],
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'date': date.toIso8601String(),
+        'itemName': itemName,
+        'quantity': quantity,
+        'unitPrice': unitPrice,
+        'unit': unit,
+        'note': note,
+        'receipts': receipts,
+      };
+
+  factory ShoppingItem.fromJson(Map<String, dynamic> json) => ShoppingItem(
+        id: json['id'] as String,
+        date: DateTime.parse(json['date'] as String),
+        itemName: json['itemName'] as String,
+        quantity: (json['quantity'] as num).toDouble(),
+        unitPrice: (json['unitPrice'] as num).toDouble(),
+        unit: json['unit'] as String,
+        note: json['note'] as String? ?? '',
+        receipts: List<String>.from((json['receipts'] as List?)?.cast<String>() ?? []),
+      );
+}
+
+class PlanItem {
+  final String id;
+  String itemName;
+  double quantity;
+  String unit;
+  String note;
+
+  PlanItem({
+    required this.id,
+    required this.itemName,
+    required this.quantity,
+    required this.unit,
+    this.note = '',
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'itemName': itemName,
+        'quantity': quantity,
+        'unit': unit,
+        'note': note,
+      };
+
+  factory PlanItem.fromJson(Map<String, dynamic> json) => PlanItem(
+        id: json['id'] as String,
+        itemName: json['itemName'] as String,
+        quantity: (json['quantity'] as num).toDouble(),
+        unit: json['unit'] as String,
+        note: json['note'] as String? ?? '',
+      );
+}
+
+class TaxRecord {
+  final String id;
+  String employeeName;
+  String position;
+  double grossSalary;
+  double taxRate;
+
+  double get taxAmount => grossSalary * (taxRate / 100);
+  double get netSalary => grossSalary - taxAmount;
+
+  TaxRecord({
+    required this.id,
+    required this.employeeName,
+    required this.position,
+    required this.grossSalary,
+    required this.taxRate,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'employeeName': employeeName,
+        'position': position,
+        'grossSalary': grossSalary,
+        'taxRate': taxRate,
+      };
+
+  factory TaxRecord.fromJson(Map<String, dynamic> j) => TaxRecord(
+        id: j['id'] as String,
+        employeeName: j['employeeName'] as String,
+        position: j['position'] as String,
+        grossSalary: (j['grossSalary'] as num).toDouble(),
+        taxRate: (j['taxRate'] as num).toDouble(),
+      );
+}
+
+class VatRecord {
+  final String id;
+  String invoiceNo;
+  String detail;
+  double amountBeforeVat;
+  double vatRate;
+
+  double get vatAmount => amountBeforeVat * (vatRate / 100);
+  double get totalAmount => amountBeforeVat + vatAmount;
+
+  VatRecord({
+    required this.id,
+    required this.invoiceNo,
+    required this.detail,
+    required this.amountBeforeVat,
+    this.vatRate = 10.0,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'invoiceNo': invoiceNo,
+        'detail': detail,
+        'amountBeforeVat': amountBeforeVat,
+        'vatRate': vatRate,
+      };
+
+  factory VatRecord.fromJson(Map<String, dynamic> j) => VatRecord(
+        id: j['id'] as String,
+        invoiceNo: j['invoiceNo'] as String,
+        detail: j['detail'] as String,
+        amountBeforeVat: (j['amountBeforeVat'] as num).toDouble(),
+        vatRate: (j['vatRate'] as num? ?? 10.0).toDouble(),
+      );
+}
+
+class ProfitTaxRecord {
+  final String id;
+  String periodTitle;
+  double totalRevenue;
+  double totalExpense;
+  double taxRate;
+
+  double get netProfit => totalRevenue - totalExpense;
+  double get taxAmount => netProfit > 0 ? netProfit * (taxRate / 100) : 0.0;
+
+  ProfitTaxRecord({
+    required this.id,
+    required this.periodTitle,
+    required this.totalRevenue,
+    required this.totalExpense,
+    this.taxRate = 20.0,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'periodTitle': periodTitle,
+        'totalRevenue': totalRevenue,
+        'totalExpense': totalExpense,
+        'taxRate': taxRate,
+      };
+
+  factory ProfitTaxRecord.fromJson(Map<String, dynamic> j) => ProfitTaxRecord(
+        id: j['id'] as String,
+        periodTitle: j['periodTitle'] as String,
+        totalRevenue: (j['totalRevenue'] as num).toDouble(),
+        totalExpense: (j['totalExpense'] as num).toDouble(),
+        taxRate: (j['taxRate'] as num? ?? 20.0).toDouble(),
+      );
+}
+
+class TaxStorageService {
+  static const String _empKey = 'tax_records_v1';
+  static const String _vatKey = 'vat_records_v1';
+  static const String _profitKey = 'profit_records_v1';
+
+  static List<TaxRecord> loadEmployees() {
+    try {
+      final json = html.window.localStorage[_empKey];
+      if (json == null) return [];
+      return (jsonDecode(json) as List)
+          .map((e) => TaxRecord.fromJson(e))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static void saveEmployees(List<TaxRecord> r) =>
+      html.window.localStorage[_empKey] = jsonEncode(r.map((e) => e.toJson()).toList());
+
+  static List<VatRecord> loadVat() {
+    try {
+      final json = html.window.localStorage[_vatKey];
+      if (json == null) return [];
+      return (jsonDecode(json) as List).map((e) => VatRecord.fromJson(e)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static void saveVat(List<VatRecord> r) =>
+      html.window.localStorage[_vatKey] = jsonEncode(r.map((e) => e.toJson()).toList());
+
+  static List<ProfitTaxRecord> loadProfit() {
+    try {
+      final json = html.window.localStorage[_profitKey];
+      if (json == null) return [];
+      return (jsonDecode(json) as List)
+          .map((e) => ProfitTaxRecord.fromJson(e))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static void saveProfit(List<ProfitTaxRecord> r) =>
+      html.window.localStorage[_profitKey] = jsonEncode(r.map((e) => e.toJson()).toList());
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -57,6 +626,384 @@ class MyApp extends StatelessWidget {
         ),
       ),
       home: const AuthWrapper(),
+    );
+  }
+}
+
+// ==================== AUTH PAGE ====================
+// ຍອດເກັບໜ້າ login / register
+class AuthPage extends StatefulWidget {
+  final Function(AuthResult) onAuthenticated;
+
+  const AuthPage({super.key, required this.onAuthenticated});
+
+  @override
+  State<AuthPage> createState() => _AuthPageState();
+}
+
+class _AuthPageState extends State<AuthPage>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  final _loginEmailCtrl = TextEditingController();
+  final _loginPasswordCtrl = TextEditingController();
+  bool _loginObscure = true;
+
+  final _regNameCtrl = TextEditingController();
+  final _regEmailCtrl = TextEditingController();
+  final _regPasswordCtrl = TextEditingController();
+  final _regConfirmCtrl = TextEditingController();
+  bool _regObscure = true;
+  bool _regConfirmObscure = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      setState(() => _errorMessage = null);
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _loginEmailCtrl.dispose();
+    _loginPasswordCtrl.dispose();
+    _regNameCtrl.dispose();
+    _regEmailCtrl.dispose();
+    _regPasswordCtrl.dispose();
+    _regConfirmCtrl.dispose();
+    super.dispose();
+  }
+
+  void _handleLogin() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    final result = await FirebaseAuthService.login(
+      _loginEmailCtrl.text,
+      _loginPasswordCtrl.text,
+    );
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    if (result.success) {
+      widget.onAuthenticated(result);
+    } else {
+      setState(() => _errorMessage = result.message);
+    }
+  }
+
+  void _handleRegister() async {
+    if (_regPasswordCtrl.text != _regConfirmCtrl.text) {
+      setState(() => _errorMessage = 'ລະຫັດຜ່ານທັງສອງຊ່ອງບໍ່ກົງກັນ');
+      return;
+    }
+    if (_regPasswordCtrl.text.length < 6) {
+      setState(() => _errorMessage = 'ລະຫັດຜ່ານຕ້ອງມີຢ່າງນ້ອຍ 6 ຕົວອັກສອນ');
+      return;
+    }
+    if (_regNameCtrl.text.trim().length < 2) {
+      setState(() => _errorMessage = 'ກະລຸນາໃສ່ຊື່ຢ່າງນ້ອຍ 2 ຕົວອັກສອນ');
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    final result = await FirebaseAuthService.register(
+      _regEmailCtrl.text,
+      _regPasswordCtrl.text,
+      _regNameCtrl.text,
+    );
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    if (result.success) {
+      widget.onAuthenticated(result);
+    } else {
+      setState(() => _errorMessage = result.message);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D1117),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildLogo(),
+                const SizedBox(height: 40),
+                _buildCard(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogo() {
+    return Column(
+      children: [
+        Container(
+          width: 64,
+          height: 64,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF238636), Color(0xFF3FB950)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF3FB950).withValues(alpha: 0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: const Center(
+            child: Text('⚡', style: TextStyle(fontSize: 32)),
+          ),
+        ),
+        const SizedBox(height: 16),
+        RichText(
+          text: const TextSpan(
+            children: [
+              TextSpan(
+                text: 'ນ້ຳ',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFFE6EDF3),
+                ),
+              ),
+              TextSpan(
+                text: 'ຊໍ້',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF3FB950),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'ເຂື່ອນໄຟຟ້ານ້ຳຊໍ້',
+          style: TextStyle(fontSize: 13, color: Color(0xFF8B949E)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF161B22),
+        border: Border.all(color: const Color(0xFF30363D)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Color(0xFF30363D))),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              indicatorColor: const Color(0xFF3FB950),
+              indicatorWeight: 2,
+              labelColor: const Color(0xFF3FB950),
+              unselectedLabelColor: const Color(0xFF8B949E),
+              tabs: const [
+                Tab(text: 'ເຂົ້າສູ່ລະບົບ'),
+                Tab(text: 'ລົງທະບຽນ'),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                if (_errorMessage != null) ...[
+                  _buildErrorBanner(_errorMessage!),
+                  const SizedBox(height: 16),
+                ],
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 200),
+                  child: SizedBox(
+                    height: _tabController.index == 0 ? 220 : 340,
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildLoginForm(),
+                        _buildRegisterForm(),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorBanner(String message) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF4D2A2A),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFFF85149).withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline, color: Color(0xFFF85149), size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(fontSize: 13, color: Color(0xFFF85149)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoginForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _loginEmailCtrl,
+          decoration: const InputDecoration(
+            labelText: 'ອີເມວ',
+            prefixIcon: Icon(Icons.email_outlined, size: 16),
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _loginPasswordCtrl,
+          obscureText: _loginObscure,
+          decoration: InputDecoration(
+            labelText: 'ລະຫັດຜ່ານ',
+            prefixIcon: const Icon(Icons.lock_outline, size: 16),
+            suffixIcon: IconButton(
+              icon: Icon(
+                _loginObscure ? Icons.visibility_off : Icons.visibility,
+                size: 18,
+              ),
+              onPressed: () => setState(() => _loginObscure = !_loginObscure),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        ElevatedButton(
+          onPressed: _isLoading ? null : _handleLogin,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF3FB950),
+            minimumSize: const Size.fromHeight(48),
+          ),
+          child: _isLoading
+              ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : const Text('ເຂົ້າສູ່ລະບົບ'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRegisterForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _regNameCtrl,
+          decoration: const InputDecoration(
+            labelText: 'ຊື່',
+            prefixIcon: Icon(Icons.person_outline, size: 16),
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _regEmailCtrl,
+          decoration: const InputDecoration(
+            labelText: 'ອີເມວ',
+            prefixIcon: Icon(Icons.email_outlined, size: 16),
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _regPasswordCtrl,
+          obscureText: _regObscure,
+          decoration: InputDecoration(
+            labelText: 'ລະຫັດຜ່ານ',
+            prefixIcon: const Icon(Icons.lock_outline, size: 16),
+            suffixIcon: IconButton(
+              icon: Icon(
+                _regObscure ? Icons.visibility_off : Icons.visibility,
+                size: 18,
+              ),
+              onPressed: () => setState(() => _regObscure = !_regObscure),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _regConfirmCtrl,
+          obscureText: _regConfirmObscure,
+          decoration: InputDecoration(
+            labelText: 'ຢືນຢັນລະຫັດຜ່ານ',
+            prefixIcon: const Icon(Icons.lock_outline, size: 16),
+            suffixIcon: IconButton(
+              icon: Icon(
+                _regConfirmObscure ? Icons.visibility_off : Icons.visibility,
+                size: 18,
+              ),
+              onPressed: () => setState(() => _regConfirmObscure = !_regConfirmObscure),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        ElevatedButton(
+          onPressed: _isLoading ? null : _handleRegister,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF238636),
+            minimumSize: const Size.fromHeight(48),
+          ),
+          child: _isLoading
+              ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : const Text('ລົງທະບຽນ'),
+        ),
+      ],
     );
   }
 }
@@ -190,6 +1137,1482 @@ const List<String> signatureRoles = [
   'ບັນຊີ-ການເງິນ',
   'ຜູ້ສະຫຼຸບ',
 ];
+
+class _MonthSummary {
+  final int month;
+  final double total;
+
+  _MonthSummary({required this.month, required this.total});
+}
+
+// ==================== SHOPPING LIST PAGE ====================
+class ShoppingListPage extends StatefulWidget {
+  const ShoppingListPage({super.key});
+
+  @override
+  State<ShoppingListPage> createState() => _ShoppingListPageState();
+}
+
+class _ShoppingListPageState extends State<ShoppingListPage> {
+  final List<ShoppingItem> _items = [];
+  String _searchQuery = '';
+
+  int _selectedMonth = DateTime.now().month;
+  int _selectedYear = DateTime.now().year;
+
+  final List<String> months = [
+    'ມັງກອນ', 'ກຸມພາ', 'ມີນາ', 'ເມສາ', 'ພຶດສະພາ', 'ມິຖຸນາ',
+    'ກໍລະກົດ', 'ສິງຫາ', 'ກັນຍາ', 'ຕຸລາ', 'ພະຈິກ', 'ທັນວາ',
+  ];
+
+  String _formatMoney(double amount) {
+    final formatter = NumberFormat('#,###', 'lo');
+    return '${formatter.format(amount)} ₭';
+  }
+
+  List<_MonthSummary> _getMonthlyTotals() {
+    return List.generate(12, (i) {
+      final m = i + 1;
+      final total = _items
+          .where((item) => item.date.year == _selectedYear && item.date.month == m)
+          .fold(0.0, (s, item) => s + item.totalPrice);
+      return _MonthSummary(month: m, total: total);
+    });
+  }
+
+  List<ShoppingItem> _getTopItems(List<ShoppingItem> filtered) {
+    final sorted = [...filtered]..sort((a, b) => b.totalPrice.compareTo(a.totalPrice));
+    return sorted.take(5).toList();
+  }
+
+  double _getGrandTotal(List<ShoppingItem> filtered) =>
+      filtered.fold(0.0, (s, item) => s + item.totalPrice);
+
+  @override
+  Widget build(BuildContext context) {
+    final filteredItems = _items.where((item) {
+      final matchesSearch =
+          item.itemName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          item.note.toLowerCase().contains(_searchQuery.toLowerCase());
+      final matchesDate =
+          item.date.month == _selectedMonth && item.date.year == _selectedYear;
+      return matchesSearch && matchesDate;
+    }).toList();
+
+    final grandTotal = _getGrandTotal(filteredItems);
+    final topItems = _getTopItems(filteredItems);
+    final monthlyTotals = _getMonthlyTotals();
+    final maxMonthly = monthlyTotals.fold(0.0, (s, d) => d.total > s ? d.total : s);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 900;
+
+        final leftPanel = _buildLeftPanel(filteredItems);
+        final rightPanel = _buildRightPanel(
+          filteredItems: filteredItems,
+          grandTotal: grandTotal,
+          topItems: topItems,
+          monthlyTotals: monthlyTotals,
+          maxMonthly: maxMonthly,
+        );
+
+        if (isWide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 3, child: leftPanel),
+              const SizedBox(width: 16),
+              SizedBox(width: 320, child: rightPanel),
+            ],
+          );
+        } else {
+          return Column(
+            children: [
+              leftPanel,
+              const SizedBox(height: 16),
+              rightPanel,
+            ],
+          );
+        }
+      },
+    );
+  }
+
+  Widget _buildLeftPanel(List<ShoppingItem> filteredItems) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF161B22),
+              border: Border.all(color: const Color(0xFF30363D)),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF1F6FEB), Color(0xFF58A6FF)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Center(
+                        child: Text('🛒', style: TextStyle(fontSize: 18)),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'ບັນຊີລາຍການຊື້ເຄື່ອງ',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFFE6EDF3),
+                            ),
+                          ),
+                          Text(
+                            'ອຸປະກອນ & ອາໄຫຼ່ — ເຂື່ອນໄຟຟ້ານ້ຳຊໍ້',
+                            style: TextStyle(fontSize: 11, color: Color(0xFF8B949E)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const ShoppingPlanPage()),
+                        );
+                      },
+                      icon: const Icon(Icons.assignment_outlined, size: 15),
+                      label: const Text('ແຜນຊື້ເຄື່ອງ', style: TextStyle(fontSize: 13)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1F4E79),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => _showShoppingDialog(),
+                      icon: const Icon(Icons.add, size: 15),
+                      label: const Text('ເພີ່ມລາຍການ', style: TextStyle(fontSize: 13)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF238636),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  onChanged: (value) => setState(() => _searchQuery = value),
+                  decoration: const InputDecoration(
+                    hintText: 'ຄົ້ນຫາ...',
+                    prefixIcon: Icon(Icons.search, size: 14),
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButton<int>(
+                        value: _selectedMonth,
+                        dropdownColor: const Color(0xFF1C2128),
+                        underline: const SizedBox(),
+                        items: List.generate(
+                          12,
+                          (i) => DropdownMenuItem(value: i + 1, child: Text(months[i])),
+                        ),
+                        onChanged: (value) => setState(() => _selectedMonth = value!),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: DropdownButton<int>(
+                        value: _selectedYear,
+                        dropdownColor: const Color(0xFF1C2128),
+                        underline: const SizedBox(),
+                        items: [
+                          DateTime.now().year - 3,
+                          DateTime.now().year - 2,
+                          DateTime.now().year - 1,
+                          DateTime.now().year,
+                          DateTime.now().year + 1,
+                        ].map((y) => DropdownMenuItem(value: y, child: Text(y.toString()))).toList(),
+                        onChanged: (value) => setState(() => _selectedYear = value!),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          _buildItemsSection(filteredItems),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildItemsSection(List<ShoppingItem> filteredItems) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF161B22),
+            border: Border.all(color: const Color(0xFF30363D)),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'ລາຍການຊື້',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 10),
+              if (filteredItems.isEmpty)
+                const Text('ບໍ່ມີລາຍການຕາມຕົວເລືອກ', style: TextStyle(color: Color(0xFF8B949E)))
+              else
+                Column(
+                  children: filteredItems
+                      .map((item) => _ShoppingItemTile(
+                            item: item,
+                            onEdit: () => _showShoppingDialog(item: item),
+                            onDelete: () => _deleteItem(item.id),
+                            onViewReceipts: () => _showReceiptViewer(item.receipts),
+                          ))
+                      .toList(),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRightPanel({
+    required List<ShoppingItem> filteredItems,
+    required double grandTotal,
+    required List<ShoppingItem> topItems,
+    required List<_MonthSummary> monthlyTotals,
+    required double maxMonthly,
+  }) {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF161B22),
+              border: Border.all(color: const Color(0xFF30363D)),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'ສະຫຼຸບ',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+                _SummaryItem(
+                  label: 'ລາຍການທັງໝົດ',
+                  value: '${filteredItems.length}',
+                  color: const Color(0xFF58A6FF),
+                ),
+                const SizedBox(height: 8),
+                _SummaryItem(
+                  label: 'ລາຍຮັບລວມ',
+                  value: _formatMoney(grandTotal),
+                  color: const Color(0xFF3FB950),
+                ),
+                const SizedBox(height: 8),
+                _SummaryItem(
+                  label: 'ລາຍການທ່າງສຸດ',
+                  value: '${topItems.length} Top',
+                  color: const Color(0xFF8B949E),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF161B22),
+              border: Border.all(color: const Color(0xFF30363D)),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('ລາຍການຂ່ອຍຫລາຍ', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 12),
+                ...topItems.map((item) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(item.itemName, style: const TextStyle(fontSize: 13, color: Color(0xFFE6EDF3))),
+                      trailing: Text(_formatMoney(item.totalPrice), style: const TextStyle(color: Color(0xFF3FB950))),
+                    )),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildMonthlyGraph(monthlyTotals, maxMonthly),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMonthlyGraph(List<_MonthSummary> monthlyTotals, double maxMonthly) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF161B22),
+        border: Border.all(color: const Color(0xFF30363D)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('ກຣາຟລາຍການ', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 180,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: monthlyTotals.map((summary) {
+                final height = maxMonthly > 0 ? summary.total / maxMonthly * 120 : 0;
+                return Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Container(
+                        width: 16,
+                        height: height.clamp(4.0, 120.0) as double,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF58A6FF),
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(months[summary.month - 1].substring(0, 2), style: const TextStyle(fontSize: 10, color: Color(0xFF8B949E))),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showReceiptViewer(List<String> receipts) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF161B22),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: const BorderSide(color: Color(0xFF30363D)),
+          ),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'ຮູບພາບໃບບິນ',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Color(0xFFE6EDF3)),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Color(0xFF8B949E), size: 18),
+                onPressed: () => Navigator.pop(ctx),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              )
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                alignment: WrapAlignment.center,
+                children: receipts.map((path) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: const Color(0xFF30363D)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: buildReceiptImage(path, _buildErrorPlaceholder()),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildErrorPlaceholder() {
+    return Container(
+      width: 250,
+      height: 350,
+      color: const Color(0xFF0D1117),
+      child: const Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.broken_image_outlined, color: Color(0xFF484F58), size: 40),
+          SizedBox(height: 8),
+          Text('ບໍ່ສາມາດໂຫຼດຮູບໄດ້', style: TextStyle(color: Color(0xFF8B949E), fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+  void _showShoppingDialog({ShoppingItem? item}) async {
+    final isEdit = item != null;
+    DateTime selectedDate = item?.date ?? DateTime.now();
+
+    final itemController = TextEditingController(text: item?.itemName ?? '');
+    final qtyController =
+        TextEditingController(text: item != null ? item.quantity.toString() : '');
+    final priceController =
+        TextEditingController(text: item != null ? item.unitPrice.toString() : '');
+    final unitController = TextEditingController(text: item?.unit ?? '');
+    final noteController = TextEditingController(text: item?.note ?? '');
+
+    List<String> selectedReceipts = item?.receipts.toList() ?? [];
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            double calculateRealtimeTotal() {
+              final qty = double.tryParse(qtyController.text) ?? 0;
+              final price = double.tryParse(priceController.text) ?? 0;
+              return qty * price;
+            }
+
+            return AlertDialog(
+              backgroundColor: const Color(0xFF161B22),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: const BorderSide(color: Color(0xFF30363D)),
+              ),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: isEdit ? const Color(0xFF1F4E79) : const Color(0xFF1A4D2E),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Icon(
+                      isEdit ? Icons.edit_outlined : Icons.add_shopping_cart,
+                      size: 16,
+                      color: isEdit
+                          ? const Color(0xFF58A6FF)
+                          : const Color(0xFF3FB950),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    isEdit ? 'ແກ້ຄວ່າງ' : 'ເພີ່ມລາຍການ',
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Color(0xFFE6EDF3)),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 380,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      InkWell(
+                        onTap: () async {
+                          final date = await showDatePicker(
+                            context: context,
+                            initialDate: selectedDate,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime(2030),
+                          );
+                          if (date != null) setDialogState(() => selectedDate = date);
+                        },
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: const Color(0xFF30363D)),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.calendar_today, size: 14, color: Color(0xFF8B949E)),
+                              const SizedBox(width: 8),
+                              const Text('ວັນທີ: ', style: TextStyle(fontSize: 12, color: Color(0xFF8B949E))),
+                              Text(
+                                '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                              ),
+                              const Spacer(),
+                              const Icon(Icons.chevron_right, size: 16, color: Color(0xFF484F58)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: itemController,
+                        decoration: const InputDecoration(
+                          labelText: 'ຊື່ອຸປະກອນ / ລາຍການ',
+                          prefixIcon: Icon(Icons.inventory_2_outlined, size: 16),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: TextField(
+                              controller: qtyController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(labelText: 'ຈຳນວນ'),
+                              onChanged: (_) => setDialogState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            flex: 3,
+                            child: TextField(
+                              controller: unitController,
+                              decoration: const InputDecoration(labelText: 'ຫົວໜ່ວຍ (ອັນ, ຊຸດ...)'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: priceController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'ລາຄາຊື້ (₭ ຕໍ່ 1 ຫົວໜ່ວຍ)',
+                          prefixIcon: Icon(Icons.monetization_on_outlined, size: 16),
+                        ),
+                        onChanged: (_) => setDialogState(() {}),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: noteController,
+                        decoration: const InputDecoration(
+                          labelText: 'ໝາຍເຫດ (ຖ້າມີ)',
+                          prefixIcon: Icon(Icons.notes_outlined, size: 16),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            final ImagePicker picker = ImagePicker();
+                            final List<XFile> images = await picker.pickMultiImage();
+                            if (images.isNotEmpty) {
+                              setDialogState(() {
+                                selectedReceipts.addAll(images.map((e) => e.path));
+                              });
+                            }
+                          },
+                          icon: const Icon(Icons.add_photo_alternate_outlined, size: 15),
+                          label: const Text('ເພີ່ມຮູບໃບບິນ', style: TextStyle(fontSize: 12)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF21262D),
+                            foregroundColor: const Color(0xFFE6EDF3),
+                            side: const BorderSide(color: Color(0xFF30363D)),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            elevation: 0,
+                          ),
+                        ),
+                      ),
+                      if (selectedReceipts.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          width: double.infinity,
+                          alignment: Alignment.centerLeft,
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: selectedReceipts.asMap().entries.map((entry) {
+                              final idx = entry.key;
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1C2128),
+                                  border: Border.all(color: const Color(0xFF30363D)),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.image_outlined, size: 14, color: Color(0xFF58A6FF)),
+                                    const SizedBox(width: 6),
+                                    Text('ຮູບ ${idx + 1}', style: const TextStyle(fontSize: 11, color: Color(0xFF8B949E))),
+                                    const SizedBox(width: 6),
+                                    InkWell(
+                                      onTap: () {
+                                        setDialogState(() {
+                                          selectedReceipts.removeAt(idx);
+                                        });
+                                      },
+                                      child: const Icon(Icons.close, size: 14, color: Color(0xFFF85149)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              const Color(0xFF1A4D2E).withValues(alpha: 0.5),
+                              const Color(0xFF1A4D2E).withValues(alpha: 0.2),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFF3FB950).withValues(alpha: 0.5)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'ຜົນລວມທັງໝົດ',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xFF8B949E),
+                                  ),
+                                ),
+                                Text(
+                                  'ຈຳນວນ × ລາຄາ',
+                                  style: TextStyle(fontSize: 11, color: Color(0xFF8B949E)),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              _formatMoney(calculateRealtimeTotal()),
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF3FB950),
+                                fontFamily: 'IBM Plex Mono',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('ຍົກເລີກ'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF238636),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  ),
+                  onPressed: () {
+                    final name = itemController.text.trim();
+                    final qty = double.tryParse(qtyController.text) ?? 0;
+                    final price = double.tryParse(priceController.text) ?? 0;
+                    final unit = unitController.text.trim();
+
+                    if (name.isEmpty || qty <= 0 || price <= 0 || unit.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('ກະລຸນາປ້ອນຂໍ້ມູນໃຫ້ຄົບ ແລະ ຖືກຕ້ອງ')),
+                      );
+                      return;
+                    }
+
+                    setState(() {
+                      if (isEdit) {
+                        item.date = selectedDate;
+                        item.itemName = name;
+                        item.quantity = qty;
+                        item.unitPrice = price;
+                        item.unit = unit;
+                        item.note = noteController.text.trim();
+                        item.receipts = selectedReceipts;
+                      } else {
+                        _items.add(ShoppingItem(
+                          id: DateTime.now().millisecondsSinceEpoch.toString(),
+                          date: selectedDate,
+                          itemName: name,
+                          quantity: qty,
+                          unitPrice: price,
+                          unit: unit,
+                          note: noteController.text.trim(),
+                          receipts: selectedReceipts,
+                        ));
+                      }
+                    });
+
+                    Navigator.pop(dialogContext);
+                  },
+                  child: Text(
+                    isEdit ? 'ບັນທຶກການແກ້ໄຂ' : 'ບັນທຶກລາຍການ',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _deleteItem(String id) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161B22),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: const BorderSide(color: Color(0xFF30363D)),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Color(0xFFF85149), size: 20),
+            SizedBox(width: 8),
+            Text('ຢືນຢັນການລຶບ'),
+          ],
+        ),
+        content: const Text('ທ່ານຕ້ອງການລຶບລາຍການຊື້ເຄື່ອງນີ້ແທ້ ຫຼື ບໍ່?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('ຍົກເລີກ'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF4D2A2A),
+              foregroundColor: const Color(0xFFF85149),
+            ),
+            onPressed: () {
+              setState(() => _items.removeWhere((item) => item.id == id));
+              Navigator.pop(ctx);
+            },
+            child: const Text('ລຶບ'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShoppingItemTile extends StatelessWidget {
+  final ShoppingItem item;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onViewReceipts;
+
+  const _ShoppingItemTile({
+    required this.item,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onViewReceipts,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D1117),
+        border: Border.all(color: const Color(0xFF30363D)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  item.itemName,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.image_outlined, size: 18),
+                onPressed: onViewReceipts,
+                tooltip: 'ເບິ່ງຮູບໃບບິນ',
+              ),
+              IconButton(
+                icon: const Icon(Icons.edit, size: 18),
+                onPressed: onEdit,
+                tooltip: 'ແກ້ໄຂ',
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete, size: 18),
+                onPressed: onDelete,
+                tooltip: 'ລຶບ',
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text('${item.quantity} ${item.unit}', style: const TextStyle(color: Color(0xFF8B949E))),
+              const SizedBox(width: 16),
+              Text(_formatMoney(item.totalPrice), style: const TextStyle(color: Color(0xFF3FB950), fontWeight: FontWeight.w600)),
+            ],
+          ),
+          if (item.note.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(item.note, style: const TextStyle(color: Color(0xFF8B949E))),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _formatMoney(double amount) {
+    final formatter = NumberFormat('#,###', 'lo');
+    return '${formatter.format(amount)} ₭';
+  }
+}
+
+class ShoppingPlanPage extends StatefulWidget {
+  const ShoppingPlanPage({super.key});
+
+  @override
+  State<ShoppingPlanPage> createState() => _ShoppingPlanPageState();
+}
+
+class _ShoppingPlanPageState extends State<ShoppingPlanPage> {
+  String _searchQuery = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final filteredItems = globalPlanItems.where((item) {
+      return item.itemName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          item.note.toLowerCase().contains(_searchQuery.toLowerCase());
+    }).toList();
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D1117),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF161B22),
+        title: const Text('ແຜນຊື້ເຄື່ອງ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFFE6EDF3))),
+        iconTheme: const IconThemeData(color: Color(0xFFE6EDF3)),
+        elevation: 0,
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Divider(height: 1, color: Color(0xFF30363D)),
+        ),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF161B22),
+                border: Border.all(color: const Color(0xFF30363D)),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      onChanged: (value) => setState(() => _searchQuery = value),
+                      style: const TextStyle(fontSize: 13, color: Color(0xFFE6EDF3)),
+                      decoration: const InputDecoration(
+                        hintText: 'ຄົ້ນຫາລາຍການແຜນຊື້...',
+                        hintStyle: TextStyle(fontSize: 12, color: Color(0xFF8B949E)),
+                        prefixIcon: Icon(Icons.search, size: 14, color: Color(0xFF8B949E)),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    onPressed: () => _showPlanDialog(),
+                    icon: const Icon(Icons.add, size: 15),
+                    label: const Text('ເພີ່ມແຜນຊື້', style: TextStyle(fontSize: 13)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF238636),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF161B22),
+                border: Border.all(color: const Color(0xFF30363D)),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: filteredItems.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 60),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            Icon(Icons.assignment_outlined, size: 40, color: Color(0xFF484F58)),
+                            SizedBox(height: 12),
+                            Text(
+                              'ຍັງບໍ່ມີລາຍການແຜນຊື້ເຄື່ອງ',
+                              style: TextStyle(fontSize: 14, color: Color(0xFF8B949E)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          decoration: const BoxDecoration(
+                            border: Border(bottom: BorderSide(color: Color(0xFF21262D))),
+                          ),
+                          child: Text(
+                            'ລວມທັງໝົດ: ${filteredItems.length} ລາຍການ',
+                            style: const TextStyle(fontSize: 12, color: Color(0xFF8B949E)),
+                          ),
+                        ),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: DataTable(
+                            columnSpacing: 24,
+                            headingRowColor: WidgetStateProperty.all(const Color(0xFF0D1117)),
+                            headingTextStyle: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF8B949E),
+                            ),
+                            dataTextStyle: const TextStyle(fontSize: 12, color: Color(0xFFE6EDF3)),
+                            dividerThickness: 0.5,
+                            columns: const [
+                              DataColumn(label: Text('ລ/ດ')),
+                              DataColumn(label: Text('ລາຍການຊື້')),
+                              DataColumn(label: Text('ຈຳນວນ')),
+                              DataColumn(label: Text('ຫົວໜ່ວຍ')),
+                              DataColumn(label: Text('ໝາຍເຫດ')),
+                              DataColumn(label: Text('ຈັດການ')),
+                            ],
+                            rows: List.generate(filteredItems.length, (index) {
+                              final item = filteredItems[index];
+                              return DataRow(
+                                cells: [
+                                  DataCell(Text('${index + 1}', style: const TextStyle(color: Color(0xFF484F58)))),
+                                  DataCell(Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.w500))),
+                                  DataCell(Text(item.quantity.toStringAsFixed(item.quantity % 1 == 0 ? 0 : 2), style: const TextStyle(color: Color(0xFF58A6FF)))),
+                                  DataCell(Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF1C2128),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(color: const Color(0xFF30363D)),
+                                    ),
+                                    child: Text(item.unit, style: const TextStyle(fontSize: 11)),
+                                  )),
+                                  DataCell(Text(item.note.isEmpty ? '—' : item.note, style: const TextStyle(color: Color(0xFF8B949E)))),
+                                  DataCell(Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.edit_outlined, size: 16, color: Color(0xFF58A6FF)),
+                                        onPressed: () => _showPlanDialog(item: item),
+                                        tooltip: 'ແກ້ໄຂ',
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline, size: 16, color: Color(0xFFF85149)),
+                                        onPressed: () => _deletePlanItem(item.id),
+                                        tooltip: 'ລຶບ',
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                      ),
+                                    ],
+                                  )),
+                                ],
+                              );
+                            }),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPlanDialog({PlanItem? item}) async {
+    final isEdit = item != null;
+    final itemController = TextEditingController(text: item?.itemName ?? '');
+    final qtyController = TextEditingController(text: item != null ? item.quantity.toString() : '');
+    final unitController = TextEditingController(text: item?.unit ?? '');
+    final noteController = TextEditingController(text: item?.note ?? '');
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF161B22),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: const BorderSide(color: Color(0xFF30363D)),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: isEdit ? const Color(0xFF1F4E79) : const Color(0xFF1A4D2E),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(
+                  isEdit ? Icons.edit_outlined : Icons.assignment_add,
+                  size: 16,
+                  color: isEdit ? const Color(0xFF58A6FF) : const Color(0xFF3FB950),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                isEdit ? 'ແກ້ໄຂແຜນຊື້' : 'ເພີ່ມແຜນຊື້',
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Color(0xFFE6EDF3)),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 350,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: itemController,
+                    style: const TextStyle(color: Color(0xFFE6EDF3)),
+                    decoration: const InputDecoration(
+                      labelText: 'ລາຍການຊື້',
+                      prefixIcon: Icon(Icons.inventory_2_outlined, size: 16),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          controller: qtyController,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(color: Color(0xFFE6EDF3)),
+                          decoration: const InputDecoration(labelText: 'ຈຳນວນ'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 3,
+                        child: TextField(
+                          controller: unitController,
+                          style: const TextStyle(color: Color(0xFFE6EDF3)),
+                          decoration: const InputDecoration(labelText: 'ຫົວໜ່ວຍ (ອັນ, ຊຸດ...)'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: noteController,
+                    style: const TextStyle(color: Color(0xFFE6EDF3)),
+                    decoration: const InputDecoration(
+                      labelText: 'ໝາຍເຫດ',
+                      prefixIcon: Icon(Icons.notes_outlined, size: 16),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('ຍົກເລີກ'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF238636),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+              ),
+              onPressed: () {
+                final name = itemController.text.trim();
+                final qty = double.tryParse(qtyController.text) ?? 0;
+                final unit = unitController.text.trim();
+
+                if (name.isEmpty || qty <= 0 || unit.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('ກະລຸນາປ້ອນຂໍ້ມູນໃຫ້ຄົບຖ້ວນ')),
+                  );
+                  return;
+                }
+
+                setState(() {
+                  if (isEdit) {
+                    item.itemName = name;
+                    item.quantity = qty;
+                    item.unit = unit;
+                    item.note = noteController.text.trim();
+                  } else {
+                    globalPlanItems.add(PlanItem(
+                      id: DateTime.now().millisecondsSinceEpoch.toString(),
+                      itemName: name,
+                      quantity: qty,
+                      unit: unit,
+                      note: noteController.text.trim(),
+                    ));
+                  }
+                });
+
+                Navigator.pop(dialogContext);
+              },
+              child: Text(
+                isEdit ? 'ບັນທຶກການແກ້ໄຂ' : 'ເພີ່ມແຜນຊື້',
+                style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _deletePlanItem(String id) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161B22),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: const BorderSide(color: Color(0xFF30363D)),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Color(0xFFF85149), size: 20),
+            SizedBox(width: 8),
+            Text('ຢືນຢັນການລຶບ', style: TextStyle(color: Color(0xFFE6EDF3))),
+          ],
+        ),
+        content: const Text('ທ່ານຕ້ອງການລຶບແຜນການຊື້ນີ້ແທ້ ຫຼື ບໍ່?', style: TextStyle(color: Color(0xFF8B949E))),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('ຍົກເລີກ'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF4D2A2A),
+              foregroundColor: const Color(0xFFF85149),
+            ),
+            onPressed: () {
+              setState(() => globalPlanItems.removeWhere((item) => item.id == id));
+              Navigator.pop(ctx);
+            },
+            child: const Text('ລຶບ'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==================== TAX PAGE ====================
+class TaxPage extends StatefulWidget {
+  const TaxPage({super.key});
+
+  @override
+  State<TaxPage> createState() => _TaxPageState();
+}
+
+class _TaxPageState extends State<TaxPage> {
+  int _selectedTaxMenu = 2;
+  final List<String> _taxMenus = [
+    'VAT (ອາກອນມູນຄ່າເພີ່ມ)',
+    'ອາກອນກຳໄລ',
+    'ອາກອນລາຍໄດ້ພະນັກງານ',
+    'ລາຍງານພາສີລວມ'
+  ];
+
+  final List<TaxRecord> _empRecords = [];
+  final List<VatRecord> _vatRecords = [];
+  final List<ProfitTaxRecord> _profitRecords = [];
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _empRecords.addAll(TaxStorageService.loadEmployees());
+    _vatRecords.addAll(TaxStorageService.loadVat());
+    _profitRecords.addAll(TaxStorageService.loadProfit());
+  }
+
+  String _fmt(double v) => NumberFormat('#,###', 'lo').format(v);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D1117),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildTaxMenuTabs(),
+              const SizedBox(height: 20),
+              if (_selectedTaxMenu == 0) _buildVatView(),
+              if (_selectedTaxMenu == 1) _buildProfitTaxView(),
+              if (_selectedTaxMenu == 2) _buildEmployeeTaxView(),
+              if (_selectedTaxMenu == 3) _buildTaxReportView(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTaxMenuTabs() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: List.generate(_taxMenus.length, (index) {
+          final isSelected = _selectedTaxMenu == index;
+          return Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isSelected ? const Color(0xFF9E4343) : const Color(0xFF161B22),
+                foregroundColor: isSelected ? Colors.white : const Color(0xFF8B949E),
+                side: BorderSide(color: isSelected ? Colors.transparent : const Color(0xFF30363D)),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () {
+                setState(() {
+                  _selectedTaxMenu = index;
+                  _searchQuery = '';
+                });
+              },
+              child: Text(
+                _taxMenus[index],
+                style: TextStyle(
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildVatView() {
+    final filteredVat = _vatRecords.where((r) => r.invoiceNo.toLowerCase().contains(_searchQuery.toLowerCase()) || r.detail.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+    return _buildTaxListView(
+      title: 'VAT (ອາກອນມູນຄ່າເພີ່ມ)',
+      children: filteredVat.map((r) => _buildVatCard(r)).toList(),
+    );
+  }
+
+  Widget _buildProfitTaxView() {
+    final filteredProfit = _profitRecords.where((r) => r.periodTitle.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+    return _buildTaxListView(
+      title: 'ອາກອນກຳໄລ',
+      children: filteredProfit.map((r) => _buildProfitCard(r)).toList(),
+    );
+  }
+
+  Widget _buildEmployeeTaxView() {
+    final filteredEmployees = _empRecords.where((r) => r.employeeName.toLowerCase().contains(_searchQuery.toLowerCase()) || r.position.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+    return _buildTaxListView(
+      title: 'ອາກອນລາຍໄດ້ພະນັກງານ',
+      children: filteredEmployees.map((r) => _buildEmployeeCard(r)).toList(),
+    );
+  }
+
+  Widget _buildTaxReportView() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF161B22),
+        border: Border.all(color: const Color(0xFF30363D)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: const Center(
+        child: Text('ລາຍງານພາສີລວມຈະມາໃນອັນໄລກ່ອນໜ້າ', style: TextStyle(color: Color(0xFF8B949E))),
+      ),
+    );
+  }
+
+  Widget _buildTaxListView({required String title, required List<Widget> children}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF161B22),
+            border: Border.all(color: const Color(0xFF30363D)),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(
+            children: [
+              TextField(
+                onChanged: (value) => setState(() => _searchQuery = value),
+                decoration: const InputDecoration(
+                  hintText: 'ຄົ້ນຫາ...',
+                  prefixIcon: Icon(Icons.search, size: 14),
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (children.isEmpty)
+                const Text('ບໍ່ພົບຂໍ້ມູນ', style: TextStyle(color: Color(0xFF8B949E)))
+              else
+                Column(children: children),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmployeeCard(TaxRecord record) {
+    return _buildTaxCard(
+      title: record.employeeName,
+      subtitle: record.position,
+      details: [
+        'ເງິນເດືອນ: ${_fmt(record.grossSalary)}',
+        'ອາກອນ: ${record.taxRate.toStringAsFixed(1)}%',
+        'ອາກອນທີ່ຕ້ອງຈ່າຍ: ${_fmt(record.taxAmount)}',
+        'ເງິນເດືອນຫລັງຫຼຸດ: ${_fmt(record.netSalary)}',
+      ],
+    );
+  }
+
+  Widget _buildVatCard(VatRecord record) {
+    return _buildTaxCard(
+      title: record.invoiceNo,
+      subtitle: record.detail,
+      details: [
+        'ຈຳນວນກ່ອນພາສີ: ${_fmt(record.amountBeforeVat)}',
+        'ອາກອນ: ${record.vatRate.toStringAsFixed(1)}%',
+        'ພາສີທີ່ຕ້ອງຈ່າຍ: ${_fmt(record.vatAmount)}',
+        'ລວມທັງໝົດ: ${_fmt(record.totalAmount)}',
+      ],
+    );
+  }
+
+  Widget _buildProfitCard(ProfitTaxRecord record) {
+    return _buildTaxCard(
+      title: record.periodTitle,
+      subtitle: 'ລາຍຮັບ ${_fmt(record.totalRevenue)}',
+      details: [
+        'ລາຍຈ່າຍ: ${_fmt(record.totalExpense)}',
+        'ກໍ່ລາຍກຳໄລ: ${_fmt(record.netProfit)}',
+        'ອາກອນ: ${record.taxRate.toStringAsFixed(1)}%',
+        'ອາກອນທີ່ຕ້ອງຈ່າຍ: ${_fmt(record.taxAmount)}',
+      ],
+    );
+  }
+
+  Widget _buildTaxCard({required String title, required String subtitle, required List<String> details}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D1117),
+        border: Border.all(color: const Color(0xFF30363D)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFFE6EDF3))),
+          const SizedBox(height: 4),
+          Text(subtitle, style: const TextStyle(fontSize: 12, color: Color(0xFF8B949E))),
+          const SizedBox(height: 12),
+          ...details.map((text) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(text, style: const TextStyle(fontSize: 12, color: Color(0xFF8B949E))),
+              )),
+        ],
+      ),
+    );
+  }
+}
 
 // ==================== UTILITIES ====================
 String formatMoney(double amount) {

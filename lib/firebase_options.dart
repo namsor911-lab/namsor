@@ -9,49 +9,51 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDummyKeyForWebPlatform',
-    appId: '1:000000000000:web:0000000000000000000000',
-    messagingSenderId: '000000000000',
-    projectId: 'accounting-app',
-    authDomain: 'accounting-app.firebaseapp.com',
-    databaseURL: 'https://accounting-app.firebaseio.com',
-    storageBucket: 'accounting-app.appspot.com',
+    apiKey: 'AIzaSyBrLhLJZYu8I2m97XJsssDgfEPejS3px9k',
+    appId: '1:901478202917:web:2ffaed92b6141b7ac089cc',
+    messagingSenderId: '901478202917',
+    projectId: 'namsor-99e7d',
+    authDomain: 'namsor-99e7d.firebaseapp.com',
+    storageBucket: 'namsor-99e7d.firebasestorage.app',
+    measurementId: 'G-ZC208WSZVW',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDummyKeyForAndroid',
-    appId: '1:000000000000:android:0000000000000000000000',
-    messagingSenderId: '000000000000',
-    projectId: 'accounting-app',
-    databaseURL: 'https://accounting-app.firebaseio.com',
-    storageBucket: 'accounting-app.appspot.com',
+    apiKey: 'AIzaSyDa6UFofrC6budqhO_5PkF6R4AQHP7ZgVQ',
+    appId: '1:901478202917:android:2e57cc0a11d26fcfc089cc',
+    messagingSenderId: '901478202917',
+    projectId: 'namsor-99e7d',
+    storageBucket: 'namsor-99e7d.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyDummyKeyForIOS',
-    appId: '1:000000000000:ios:0000000000000000000000',
-    messagingSenderId: '000000000000',
-    projectId: 'accounting-app',
-    databaseURL: 'https://accounting-app.firebaseio.com',
-    storageBucket: 'accounting-app.appspot.com',
+    apiKey: 'AIzaSyDaxmsxWx-6MojLXOu_ZIezSsMPOGafguQ',
+    appId: '1:901478202917:ios:1cd30b34dbe971ddc089cc',
+    messagingSenderId: '901478202917',
+    projectId: 'namsor-99e7d',
+    storageBucket: 'namsor-99e7d.firebasestorage.app',
+    iosClientId: '901478202917-qacj7a8vip9qa7avutiof7cuevplpqn0.apps.googleusercontent.com',
+    iosBundleId: 'com.example.accounting',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyDummyKeyForMacOS',
-    appId: '1:000000000000:macos:0000000000000000000000',
-    messagingSenderId: '000000000000',
-    projectId: 'accounting-app',
-    databaseURL: 'https://accounting-app.firebaseio.com',
-    storageBucket: 'accounting-app.appspot.com',
+    apiKey: 'AIzaSyDaxmsxWx-6MojLXOu_ZIezSsMPOGafguQ',
+    appId: '1:901478202917:ios:1cd30b34dbe971ddc089cc',
+    messagingSenderId: '901478202917',
+    projectId: 'namsor-99e7d',
+    storageBucket: 'namsor-99e7d.firebasestorage.app',
+    iosClientId: '901478202917-qacj7a8vip9qa7avutiof7cuevplpqn0.apps.googleusercontent.com',
+    iosBundleId: 'com.example.accounting',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyDummyKeyForWindows',
-    appId: '1:000000000000:windows:0000000000000000000000',
-    messagingSenderId: '000000000000',
-    projectId: 'accounting-app',
-    databaseURL: 'https://accounting-app.firebaseio.com',
-    storageBucket: 'accounting-app.appspot.com',
+    apiKey: 'AIzaSyBrLhLJZYu8I2m97XJsssDgfEPejS3px9k',
+    appId: '1:901478202917:web:b31dcee6f1db2349c089cc',
+    messagingSenderId: '901478202917',
+    projectId: 'namsor-99e7d',
+    authDomain: 'namsor-99e7d.firebaseapp.com',
+    storageBucket: 'namsor-99e7d.firebasestorage.app',
+    measurementId: 'G-GQGY20VSPK',
   );
 
   static const FirebaseOptions linux = FirebaseOptions(

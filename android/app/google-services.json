@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "901478202917",
+    "project_id": "namsor-99e7d",
+    "storage_bucket": "namsor-99e7d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:901478202917:android:2e57cc0a11d26fcfc089cc",
+        "android_client_info": {
+          "package_name": "com.example.accounting"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "901478202917-25dr8p1fm877gbjhjmbsafvrsg6589p2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDa6UFofrC6budqhO_5PkF6R4AQHP7ZgVQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "901478202917-25dr8p1fm877gbjhjmbsafvrsg6589p2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
