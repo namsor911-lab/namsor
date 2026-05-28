@@ -5,7 +5,7 @@ import 'package:universal_html/html.dart' as html;
 import 'package:intl/intl.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';   // ສ້າງດ້ວຍ flutterfire configure
-import 'auth_page.dart' hide AuthResult;
+import 'auth_page.dart';
 import 'firebase_service.dart' show FirebaseAuthService, TransactionService, SignatureService, AuthResult;
 import 'shopping_page.dart';
 import 'tax_page.dart';
