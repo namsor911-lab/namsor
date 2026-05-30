@@ -24,7 +24,7 @@ if ($LASTEXITCODE -ne 0) { throw "flutter pub get failed." }
 
 # 4. Build release
 Write-Host "`n[2/3] Building Flutter web (release)..." -ForegroundColor Yellow
-flutter build web --release --no-wasm-dry-run
+flutter build web --release
 if ($LASTEXITCODE -ne 0) { throw "Flutter build failed." }
 
 # 5. Deploy
