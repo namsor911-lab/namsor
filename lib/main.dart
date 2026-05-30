@@ -10,6 +10,7 @@ import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
 import 'package:firebase_storage/firebase_storage.dart' as fb_storage;
 import 'firebase_options.dart';
+import 'env_config.dart';
 
 // ==================== FIREBASE SERVICE CLASSES ====================
 class AuthResult {
@@ -707,6 +708,7 @@ class TaxStorageService {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await EnvConfig.load();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
 }

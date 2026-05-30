@@ -27,11 +27,21 @@ migrate_working_dir/
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
+.flutter-plugins
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
 /build/
+node_modules/
+/.env
+.env.*
 /coverage/
+
+# IDEs
+.vscode/
+.idea/
+
+# pubspec.lock should be committed for Flutter web apps; do not ignore it unless explicitly desired.
 
 # Symbolication related
 app.*.symbols

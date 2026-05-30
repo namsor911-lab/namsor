@@ -1,0 +1,21 @@
+{
+  "name": "flutter-firebase-hosting-diagnoser",
+  "version": "1.0.0",
+  "description": "Diagnostic helper for Flutter web deployed to Firebase Hosting, with fixes, URL analysis, and browser validation.",
+  "type": "module",
+  "bin": {
+    "firebase-hosting-diagnose": "./firebase-hosting-diagnose.mjs"
+  },
+  "scripts": {
+    "diagnose": "node ./firebase-hosting-diagnose.mjs",
+    "diagnose:json": "node ./firebase-hosting-diagnose.mjs --json"
+  },
+  "dependencies": {
+    "axios": "^1.7.6",
+    "chalk": "^5.3.0",
+    "fast-glob": "^3.3.3",
+    "ora": "^6.1.2",
+    "open": "^9.1.0",
+    "execa": "^7.1.1"
+  }
+}
