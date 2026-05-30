@@ -30,11 +30,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  intl: ^0.18.0
-  share_plus: ^7.2.1
-  syncfusion_flutter_charts: ^23.1.43
+  intl: ^0.20.2
+  syncfusion_flutter_charts: ^33.2.8
   universal_html: ^2.3.0
-  signature: ^5.4.1
+  signature: ^6.3.0
   crypto: ^3.0.0
   image_picker: ^1.1.2
   shared_preferences: ^2.2.2
