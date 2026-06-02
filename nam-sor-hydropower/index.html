@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nam Sor Hydropower</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <img class="logo" src="assets/images/logo.png" alt="Nam Sor Hydropower logo" />
+    <div>
+      <h1>Nam Sor Hydropower</h1>
+      <p>Operations dashboard for receipts, accounting, budgets, and approvals.</p>
+    </div>
+  </header>
+
+  <nav class="top-nav">
+    <button onclick="go('#dashboard')">Dashboard</button>
+    <button onclick="go('#receipts')">Receipts</button>
+    <button onclick="go('#accounting')">Accounting</button>
+    <button onclick="go('#purchases')">Purchases</button>
+    <button onclick="go('#budget')">Budget</button>
+    <button onclick="go('#reports')">Reports</button>
+    <button onclick="toggleSidebar()">Menu</button>
+  </nav>
+
+  <main class="layout">
+    <aside id="sidebar" class="sidebar">
+      <h2>Quick Links</h2>
+      <button onclick="go('#dashboard')">Dashboard</button>
+      <button onclick="go('#receipts')">Receipts</button>
+      <button onclick="go('#accounting')">Accounting</button>
+      <button onclick="go('#purchases')">Purchases</button>
+      <button onclick="go('#budget')">Budget</button>
+      <button onclick="go('#reports')">Reports</button>
+    </aside>
+
+    <section class="content">
+      <section id="dashboard" class="card">
+        <h2>Dashboard Overview</h2>
+        <div class="dashboard-grid">
+          <div class="metric"><span id="dashTotal">0</span><small>Total Balance</small></div>
+          <div class="metric"><span id="dashPending">0</span><small>Pending Receipts</small></div>
+          <div class="metric"><span id="dashBudget">0</span><small>Budget Planned</small></div>
+        </div>
+        <canvas id="barChart" width="640" height="240"></canvas>
+      </section>
+
+      <section id="receipts" class="card">
+        <h2>Receipts</h2>
+        <input id="receiptFile" type="file" accept="image/*" onchange="previewReceipt(this)" />
+        <div class="receipt-preview" id="receiptPreview"></div>
+        <button onclick="clearReceipt()">Clear Receipt</button>
+        <button onclick="loadTableReceipts()">Load Stored Receipts</button>
+        <table id="receiptTable">
+          <thead><tr><th>ID</th><th>Name</th><th>Date</th><th>Action</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section id="accounting" class="card">
+        <h2>Income / Expense</h2>
+        <button onclick="openAdd()">Add Transaction</button>
+        <button onclick="exportCSV()">Export CSV</button>
+        <table id="accountTable">
+          <thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Type</th><th>Actions</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="summary">
+          <div>Opening Balance: <strong id="openingBalance">0.00</strong></div>
+          <div>Total Balance: <strong id="totalBalance">0.00</strong></div>
+        </div>
+      </section>
+
+      <section id="purchases" class="card">
+        <h2>Purchase Items</h2>
+        <button onclick="addPurchaseRow()">Add Item</button>
+        <table id="purchaseTable">
+          <thead><tr><th>Item</th><th>Quantity</th><th>Price</th><th>Total</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section id="budget" class="card">
+        <h2>Budget Planning</h2>
+        <button onclick="openBudgetItemModal()">New Budget Item</button>
+        <select id="budgetYearSelect"></select>
+        <table id="budgetTable">
+          <thead><tr><th>Category</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section id="reports" class="card">
+        <h2>Reports</h2>
+        <div class="report-controls">
+          <label>Year <select id="yearSelect"></select></label>
+          <button onclick="updateQ()">Quarterly</button>
+          <button onclick="updateA()">Annual</button>
+          <button onclick="exportAnnualCSV()">Export Annual CSV</button>
+        </div>
+        <div id="reportContent"></div>
+      </section>
+    </section>
+  </main>
+
+  <div id="modalBackdrop" class="modal-backdrop hidden"></div>
+  <div id="modal" class="modal hidden">
+    <h3 id="modalTitle">Modal</h3>
+    <div id="modalBody"></div>
+    <div class="modal-footer">
+      <button onclick="closeModal()">Cancel</button>
+      <button onclick="saveTrans()">Save</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="js/utils.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/receipt.js"></script>
+  <script src="js/signature.js"></script>
+  <script src="js/accounting.js"></script>
+  <script src="js/purchase.js"></script>
+  <script src="js/budget.js"></script>
+  <script src="js/reports.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

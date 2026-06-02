@@ -5,9 +5,14 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
 import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
-import 'main.dart' show Transaction, SignatureData;
-import 'shopping_page.dart' show ShoppingItem, PlanItem;
-import 'tax_page.dart' show TaxRecord, VatRecord, ProfitTaxRecord;
+
+import 'package:accounting/models/transaction.dart';
+import 'package:accounting/models/signature_data.dart';
+import 'package:accounting/models/shopping_item.dart';
+import 'package:accounting/models/plan_item.dart';
+import 'package:accounting/models/tax_record.dart';
+import 'package:accounting/models/vat_record.dart';
+import 'package:accounting/models/profit_tax_record.dart';
 
 // ==================== FIREBASE AUTH SERVICE ====================
 class FirebaseAuthService {

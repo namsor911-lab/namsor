@@ -1,6 +1,8 @@
 // auth_page.dart  (ແກ້ໄຂ: ໃຊ້ FirebaseAuthService ແທນ LocalStorage AuthService)
 import 'package:flutter/material.dart';
-import 'firebase_service.dart' show FirebaseAuthService, AuthResult;
+
+import 'package:accounting/models/models.dart';
+import 'package:accounting/services/firebase_auth_service.dart';
 
 // ==================== AUTH PAGE ====================
 class AuthPage extends StatefulWidget {

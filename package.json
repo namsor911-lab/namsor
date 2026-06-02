@@ -7,8 +7,10 @@
     "firebase-hosting-diagnose": "./firebase-hosting-diagnose.mjs"
   },
   "scripts": {
-    "diagnose": "node ./firebase-hosting-diagnose.mjs",
-    "diagnose:json": "node ./firebase-hosting-diagnose.mjs --json"
+    "diagnose": "node ./diagnose.js",
+    "diagnose:full": "node ./firebase-hosting-diagnose.mjs",
+    "diagnose:json": "node ./diagnose.js --json",
+    "diagnose:fix": "node ./diagnose.js --fix"
   },
   "dependencies": {
     "axios": "^1.7.6",
