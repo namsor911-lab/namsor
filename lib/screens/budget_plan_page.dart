@@ -258,7 +258,7 @@ class _BudgetPlanPageState extends State<BudgetPlanPage> {
               child: Column(children: [
                 Expanded(
                   child: hasSig
-                      ? Image.network(url, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Color(0xFF8B949E)))
+                      ? Image.network(url, fit: BoxFit.contain, errorBuilder: (ctx, err, stack) => const Icon(Icons.broken_image, color: Color(0xFF8B949E)))
                       : const Center(child: Text('ຍັງບໍ່ເຊັນ', style: TextStyle(fontSize: 11, color: Color(0xFF8B949E)))),
                 ),
                 Container(
@@ -304,7 +304,7 @@ class _BudgetPlanPageState extends State<BudgetPlanPage> {
     final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
-    final url = await ReceiptStorageService.uploadReceipt('sigs', bytes, 'budget_${role}_${_mk}.jpg');
+    final url = await ReceiptStorageService.uploadReceipt('sigs', bytes, 'budget_${role}_$_mk.jpg');
     if (url != null) {
       await BudgetPlanService.updateSig(_mk, field, url);
     } else if (mounted) {
@@ -342,7 +342,7 @@ class _BudgetPlanPageState extends State<BudgetPlanPage> {
                 const SizedBox(height: 8),
                 Wrap(spacing: 8, runSpacing: 8, children: item.receipts.map((url) => GestureDetector(
                       onTap: () => showDialog(context: ctx, builder: (c) => Dialog(backgroundColor: Colors.transparent, child: GestureDetector(onTap: () => Navigator.pop(c), child: InteractiveViewer(child: Image.network(url, fit: BoxFit.contain))))),
-                      child: ClipRRect(borderRadius: BorderRadius.circular(6), child: Image.network(url, width: 80, height: 80, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.broken_image))),
+                      child: ClipRRect(borderRadius: BorderRadius.circular(6), child: Image.network(url, width: 80, height: 80, fit: BoxFit.cover, errorBuilder: (ctx, err, stack) => const Icon(Icons.broken_image))),
                     )).toList()),
               ],
             ]),
@@ -434,7 +434,7 @@ class _BudgetPlanPageState extends State<BudgetPlanPage> {
                     ]),
                     if (rcts.isNotEmpty)
                       Wrap(spacing: 8, runSpacing: 8, children: rcts.asMap().entries.map((e) => Stack(children: [
-                            ClipRRect(borderRadius: BorderRadius.circular(4), child: Image.network(e.value, width: 56, height: 56, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.broken_image))),
+                            ClipRRect(borderRadius: BorderRadius.circular(4), child: Image.network(e.value, width: 56, height: 56, fit: BoxFit.cover, errorBuilder: (ctx, err, stack) => const Icon(Icons.broken_image))),
                             Positioned(top: 0, right: 0, child: GestureDetector(onTap: () => setS(() => rcts.removeAt(e.key)), child: Container(width: 16, height: 16, decoration: const BoxDecoration(color: Color(0xFFF85149), shape: BoxShape.circle), child: const Icon(Icons.close, size: 10, color: Colors.white)))),
                           ])).toList())
                     else
